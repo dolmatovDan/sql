@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Http;
 
 namespace MknImmiSql.Api.V1;
 
@@ -18,6 +19,14 @@ public class Token
         this.type = type;
     }
 
+    public Token(Int32 l, Int32 r, EToken type, String str)
+    {
+        this.l = l;
+        this.r = r;
+        this.type = type;
+        this.str = str;
+    }
+
     public Token()
     {
         l = r = 0;
@@ -31,6 +40,18 @@ public class Token
     public Boolean IsDoubleQuoted()
     {
         return type == EToken.String && str[0] == '"' && str[^1] == '"';
+    }
+
+    public void ConvertToTableName()
+    {
+        if (!IsInstanceName(this))
+            throw new TableException(StatusCodes.Status400BadRequest, "Incorrect query");
+
+        if (IsDoubleQuoted())
+        {
+            str = str.Substring(1, str.Length - 2);
+            type = EToken.Literal;
+        }
     }
 
     public static Boolean IsEqual(Token self, Token other)
@@ -51,8 +72,10 @@ public class Token
         return false;
     }
 
-    public static Boolean CheckType(String type, Token t)
+    public static Boolean CheckType(String type, Token? t)
     {
+        if (t == null)
+            return true;
         if (t.str == "null")
             return true;
         switch (type)
@@ -70,6 +93,22 @@ public class Token
             default:
                 return false;
         }
+    }
+
+    public static String GetType(Token? t)
+    {
+
+        if (t == null)
+            return "null";
+        if (Int32.TryParse(t.str, out _))
+            return "integer";
+        if (Boolean.TryParse(t.str, out _))
+            return "boolean";
+        if (Double.TryParse(t.str, out _))
+            return "float";
+        if (t.IsDoubleQuoted())
+            throw new TableException(StatusCodes.Status400BadRequest, "Incorrect type");
+        return "string";
     }
 
     public static Boolean RemoveTokenSequence(ref List<Token> tokens, List<Token> target)
@@ -115,5 +154,46 @@ public class Token
             mainArray.Count - index - subarray.Count);
         return newArray.ToList();
     }
+
+    public static Int32 CompareTokensWithType(Token a, Token b, String type)
+    {
+        if (a.str == b.str)
+            return 0;
+        if (a.str == null)
+            return -1;
+        if (b.str == null)
+            return 1;
+
+        switch (type)
+        {
+            case "integer":
+            case "float":
+            case "serial":
+                Double left = 0;
+                Double right = 0;
+                Double.TryParse(a.str, out left);
+                Double.TryParse(b.str, out right);
+                Double res = left - right;
+                if (res < 0)
+                    return -1;
+                if (Math.Abs(res) < 1e-12)
+                    return 0;
+                return 1;
+
+            case "boolean":
+                if (a.str == b.str)
+                    return 0;
+                if (a.str == "true")
+                    return 1;
+                return -1;
+
+            case "string":
+                return String.Compare(a.str, b.str);
+
+            default:
+                throw new Exception("incorrect type");
+        }
+    }
+
 }
 

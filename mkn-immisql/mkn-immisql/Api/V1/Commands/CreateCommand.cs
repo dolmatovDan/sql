@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Http;
 namespace MknImmiSql.Api.V1;
 
@@ -54,6 +55,15 @@ public class CreateCommand : ISqlCommand
         }
         if (cntPKey > 1)
             return false;
+
+        Dictionary<String, Int32> columnNames = new Dictionary<String, Int32>();
+        foreach (var column in schema.Columns)
+        {
+            if (columnNames.ContainsKey(column.Name))
+                return false;
+            columnNames[column.Name] = 1;
+        }
+
         return true;
     }
 

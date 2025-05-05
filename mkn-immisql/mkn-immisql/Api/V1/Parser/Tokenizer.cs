@@ -7,17 +7,32 @@ namespace MknImmiSql.Api.V1;
 
 public class Tokenizer
 {
-    public static readonly Char[] OPERATORS = { ',', '(', ')', '*', ';' };
+    public static readonly Char[] OPERATORS = { ',', '(', ')', '*', ';', '<', '>', '=', '!', '.' };
     public static readonly Char[] ALPHABET =
     {
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-        'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-        'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '.', '\'', '"', '!'
+        'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B',
+        'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '.', '\'', '"',
+        '!',
+
+        '\u0410', '\u0411', '\u0412', '\u0413', '\u0414', '\u0415', '\u0416',
+        '\u0417', '\u0418', '\u0419', '\u041A', '\u041B', '\u041C', '\u041D',
+        '\u041E', '\u041F', '\u0420', '\u0421', '\u0422', '\u0423', '\u0424',
+        '\u0425', '\u0426', '\u0427', '\u0428', '\u0429', '\u042A', '\u042B',
+        '\u042C', '\u042D', '\u042E', '\u042F', '\u0401',
+
+        '\u0430', '\u0431', '\u0432', '\u0433', '\u0434', '\u0435', '\u0436',
+        '\u0437', '\u0438', '\u0439', '\u043A', '\u043B', '\u043C', '\u043D',
+        '\u043E', '\u043F', '\u0440', '\u0441', '\u0442', '\u0443', '\u0444',
+        '\u0445', '\u0446', '\u0447', '\u0448', '\u0449', '\u044A', '\u044B',
+        '\u044C', '\u044D', '\u044E', '\u044F', '\u0451',
     };
+
     public static readonly Char[] NUMBERS = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
-    public static readonly Char[] SPACES = { ' ', '\n' };
-    public static readonly Char[] ALL = OPERATORS.Concat(ALPHABET).Concat(NUMBERS).Concat(SPACES).ToArray();
+    public static readonly Char[] SPACES = { ' ', '\n', '\t', '\r' };
+    public static readonly Char[] ALL =
+      OPERATORS.Concat(ALPHABET).Concat(NUMBERS).Concat(SPACES).ToArray();
 
     public static readonly Char finalChar = '$';
 
@@ -39,6 +54,13 @@ public class Tokenizer
         _nodeToToken[16] = EToken.String;
     }
 
+    private void CreateTransition(Int32 node, Char ch, Int32 dest)
+    {
+        if (_nodes[node].Transition.ContainsKey(ch))
+            return;
+        _nodes[node].Transition[ch] = dest;
+    }
+
     private void build()
     {
         // Init Node
@@ -50,7 +72,7 @@ public class Tokenizer
         _nodes[2] = new Node(true);
         foreach (Char ch in SPACES)
         {
-            _nodes[_startNode].Transition[ch] = 1;
+            CreateTransition(_startNode, ch, 1);
             _nodes[1].Transition[ch] = 1;
         }
         foreach (Char ch in ALL)
@@ -67,9 +89,11 @@ public class Tokenizer
         _nodes[3] = new Node(false);
         _nodes[4] = new Node(false);
         _nodes[5] = new Node(true);
+        _nodes[18] = new Node(false);
+        _nodes[19] = new Node(false);
         foreach (Char ch in NUMBERS)
         {
-            _nodes[_startNode].Transition[ch] = 3;
+            CreateTransition(_startNode, ch, 3);
             _nodes[3].Transition[ch] = 3;
             _nodes[4].Transition[ch] = 4;
         }
@@ -85,18 +109,39 @@ public class Tokenizer
                 }
             }
         }
+        _nodes[4].Transition['e'] = 18;
+        // for scientific format
+        _nodes[18].Transition['+'] = 19;
+        _nodes[18].Transition['-'] = 19;
+        foreach (Char ch in NUMBERS)
+        {
+            _nodes[19].Transition[ch] = 19;
+        }
+        foreach (Char ch in ALL)
+        {
+            if (!Array.Exists(NUMBERS, c => c == ch))
+            {
+                _nodes[19].Transition[ch] = 5;
+            }
+        }
         _nodes[3].Transition[finalChar] = 5;
         _nodes[4].Transition[finalChar] = 5;
+        _nodes[19].Transition[finalChar] = 5;
 
 
         // Operator
         _nodes[6] = new Node(false);
+        _nodes[20] = new Node(false);
+        _nodes[21] = new Node(false);
         _nodes[7] = new Node(true);
+        CreateTransition(_startNode, '!', 20);
+        CreateTransition(_startNode, '<', 20);
+        CreateTransition(_startNode, '>', 20);
         foreach (Char ch in ALL)
         {
             if (Array.Exists(OPERATORS, c => c == ch))
             {
-                _nodes[_startNode].Transition[ch] = 6;
+                CreateTransition(_startNode, ch, 6);
                 _nodes[6].Transition[ch] = 7;
             }
             else
@@ -104,14 +149,28 @@ public class Tokenizer
                 _nodes[6].Transition[ch] = 7;
             }
         }
+        foreach (Char ch in ALL)
+        {
+            if (ch != '=')
+            {
+                _nodes[20].Transition[ch] = 7;
+            }
+            _nodes[21].Transition[ch] = 7;
+        }
+        _nodes[20].Transition['='] = 21;
+
         _nodes[6].Transition[finalChar] = 7;
+        _nodes[20].Transition[finalChar] = 7;
+        _nodes[21].Transition[finalChar] = 7;
+
 
         // Literal
         _nodes[8] = new Node(false);
         _nodes[9] = new Node(true);
         foreach (Char ch in ALPHABET)
         {
-            _nodes[_startNode].Transition[ch] = 8;
+            if (ch != '\'' && ch != '"')
+                CreateTransition(_startNode, ch, 8);
         }
         foreach (Char ch in ALPHABET.Concat(NUMBERS))
         {
@@ -124,6 +183,7 @@ public class Tokenizer
                 _nodes[8].Transition[ch] = 9;
             }
         }
+        _nodes[8].Transition['.'] = 9;
         _nodes[8].Transition[finalChar] = 9;
 
 
@@ -132,7 +192,7 @@ public class Tokenizer
         _nodes[11] = new Node(false);
         _nodes[12] = new Node(false);
         _nodes[17] = new Node(true);
-        _nodes[_startNode].Transition['\''] = 10;
+        CreateTransition(_startNode, '\'', 10);
         foreach (Char ch in ALL)
         {
             if (ch != '\'' && ch != '\\')
@@ -152,6 +212,7 @@ public class Tokenizer
         {
             _nodes[12].Transition[ch] = 17;
         }
+        _nodes[12].Transition[finalChar] = 17;
 
 
         // String, double quoted
@@ -159,7 +220,7 @@ public class Tokenizer
         _nodes[14] = new Node(false);
         _nodes[15] = new Node(false);
         _nodes[16] = new Node(true);
-        _nodes[_startNode].Transition['"'] = 13;
+        CreateTransition(_startNode, '"', 13);
         foreach (Char ch in ALL)
         {
             if (ch != '\\' && ch != '"')
@@ -181,6 +242,7 @@ public class Tokenizer
 
         _nodes[13].Transition[finalChar] = 16;
         _nodes[14].Transition[finalChar] = 16;
+        _nodes[15].Transition[finalChar] = 16;
     }
 
     public List<Token> SplitInTokens(String s)
